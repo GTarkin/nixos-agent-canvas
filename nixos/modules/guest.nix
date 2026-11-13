@@ -180,6 +180,14 @@ in
         NPM_CONFIG_CACHE = "${cfg.stateDir}/npm-cache";
         # Damit der Agent Werkzeuge über Nix holen kann.
         NIX_PATH = "nixpkgs=flake:nixpkgs";
+        # Nix-Python statt uv-Download (generisches glibc-CPython laeuft hier
+        # nicht) und Loader-Pfad fuer PyPI-Wheels (tokenizers -> libstdc++).
+        UV_PYTHON_PREFERENCE = "only-system";
+        LD_LIBRARY_PATH = lib.makeLibraryPath [
+          pkgs.stdenv.cc.cc.lib
+          pkgs.zlib
+        ];
+        SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
       }
       // cfg.extraEnvironment;
 
