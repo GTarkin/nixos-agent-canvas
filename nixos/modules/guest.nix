@@ -120,6 +120,11 @@ in
     # dynamically linked executables intended for generic linux environments".
     programs.nix-ld.enable = true;
 
+    # LiteLLM läuft im Host-Netz (0.0.0.0:4000); der Gast teilt diesen
+    # Namespace, also ist 127.0.0.1 richtig. Der Name kommt aus dem
+    # LLM-Profil (Preset) und muss auch im Gast auflösen.
+    networking.extraHosts = "127.0.0.1 litellm";
+
     # NixOS-Container: Store und nix-daemon kommen vom Wirt.
     boot.isContainer = true;
 
