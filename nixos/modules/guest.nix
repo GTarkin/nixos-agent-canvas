@@ -21,7 +21,13 @@ let
 
   # Python samt Zusatzpaketen (pandas & Co.). Landet im PATH der Unit, damit
   # der Agent im Tool-Shell genau diesen Interpreter vorfindet.
-  pythonEnv = pkgs.python314.withPackages (_: cfg.pythonPackages);
+  pythonEnv = pkgs.python314.withPackages (
+    _:
+    if builtins.isFunction cfg.pythonPackages then
+      cfg.pythonPackages pkgs.python314Packages
+    else
+      cfg.pythonPackages
+  );
 in
 {
   options.services.agent-canvas = {
@@ -76,10 +82,15 @@ in
     };
 
     pythonPackages = lib.mkOption {
-      type = lib.types.listOf lib.types.package;
+      type = lib.types.either (lib.types.listOf lib.types.package) (
+        lib.types.functionTo (lib.types.listOf lib.types.package)
+      );
       default = [ ];
       example = lib.literalExpression "ps: [ ps.pandas ps.openpyxl ]";
-      description = "Python-Pakete des Interpreters, den der Agent benutzt.";
+      description = ''
+        Python-Pakete des Interpreters, den der Agent benutzt. Entweder eine
+        Liste oder eine Funktion auf python314Packages.
+      '';
     };
 
     portOffset = lib.mkOption {
