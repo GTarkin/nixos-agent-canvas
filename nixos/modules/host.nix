@@ -37,8 +37,40 @@ in
               };
 
               hostPort = lib.mkOption {
-                type = lib.types.port;
-                description = "Port auf 127.0.0.1 des Wirts (nginx/oauth2-proxy davor).";
+                type = lib.types.nullOr lib.types.port;
+                default = null;
+                description = ''
+                  Nur bei privateNetwork = true: nspawn-DNAT von diesem Host-Port
+                  auf containerPort. Vorsicht: DNAT läuft über FORWARD, nicht
+                  INPUT — der Port ist damit nicht durch die nixos-fw-Regeln
+                  geschützt. Für Produktion besser ohne forwardPorts arbeiten und
+                  nginx direkt auf die Container-IP zeigen lassen.
+                '';
+              };
+
+              privateNetwork = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  false: Container teilt den Netzwerk-Namespace des Wirts — die
+                  Dienste im Gast belegen Host-Ports direkt. Praktisch für einen
+                  einzelnen Testgast, unmöglich für mehrere Instanzen.
+                  true: eigenes veth; dann hostAddress/localAddress setzen.
+                '';
+              };
+
+              hostAddress = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                example = "10.100.1.1/24";
+                description = "Host-Seite des veth (nur bei privateNetwork = true).";
+              };
+
+              localAddress = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                example = "10.100.1.2/24";
+                description = "Container-Adresse; im Gast als statische IP setzen.";
               };
 
               workspaceDir = lib.mkOption {
@@ -136,15 +168,17 @@ in
           }
         ];
 
-        # nspawn bindet --port auf 0.0.0.0; nach außen bleibt es zu, weil die
-        # Ports nicht in networking.firewall.allowedTCPPorts stehen.
-        forwardPorts = [
+        inherit (inst) privateNetwork;
+
+        forwardPorts = lib.optionals (inst.privateNetwork && inst.hostPort != null) [
           {
             containerPort = inst.port;
             hostPort = inst.hostPort;
             protocol = "tcp";
           }
         ];
+
+        inherit (inst) hostAddress localAddress;
       }
     ) cfg.instances;
   };
