@@ -99,8 +99,11 @@ in
         "flakes"
       ];
       trusted-users = [ "root" ];
+      # Global in /etc/nix/nix.conf: der lokale Store ist read-only gebunden,
+      # Schreibzugriffe müssen über den Daemon des Wirts laufen. Als
+      # environment.variables reicht es nicht (greift nur in Login-Shells).
+      store = "daemon";
     };
-    environment.variables.NIX_REMOTE = "daemon";
 
     # Fällt für alles zurück, was doch als generisches Linux-Binary kommt
     # (der Agent lädt gern mal Fremd-Binaries). Ohne das: "NixOS cannot run
