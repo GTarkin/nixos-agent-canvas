@@ -128,6 +128,21 @@ in
 
     systemd.services.agent-canvas = {
       description = "OpenHands Agent Canvas";
+
+      # WICHTIG: environment.systemPackages landet NICHT im PATH einer Unit.
+      # Ohne diese Liste findet npm kein `sh` und keine Tools (erster Versuch:
+      # "npm error enoent spawn sh").
+      path = with pkgs; [
+        bash
+        coreutils
+        nodejs_24
+        uv
+        git
+        gnutar
+        gzip
+        which
+        cacert
+      ];
       wantedBy = [ "multi-user.target" ];
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
