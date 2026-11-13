@@ -187,6 +187,13 @@ in
     # NixOS-Container: Store und nix-daemon kommen vom Wirt.
     boot.isContainer = true;
 
+    # Kein IPv6 im Gast: erreichbar ist er nur über veth-IPv4 (und litellm per
+    # extraHosts). Die automatische Link-Local-Adresse auf eth0 wäre ein
+    # lateraler Pfad, sobald je ein weiterer Container im selben Segment steht;
+    # disable_ipv6 entfernt sie auch von der bereits existierenden Schnittstelle.
+    networking.enableIPv6 = false;
+    boot.kernel.sysctl."net.ipv6.conf.eth0.disable_ipv6" = true;
+
     # Eigene Firewall NUR mit eigener Netzwerk-Namespace. Im geteilten Netns
     # würde der Gast die Regeln des WIRTS überschreiben (iptables/nftables
     # gelten pro Namespace) — deshalb war sie hier abgeschaltet. Die

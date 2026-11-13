@@ -242,9 +242,22 @@ in
         # (Folge: kein agent-canvas.service, leeres /etc). Der Tree ist winzig
         # (ephemeres /run/nixos-containers/<name>), chown ist billig und
         # funktioniert auf jedem Dateisystem — `map` ginge nicht überall.
-        extraFlags = lib.optionals (inst.privateUsers != "no") [
-          "--private-users-ownership=chown"
-        ];
+        extraFlags =
+          lib.optionals (inst.privateUsers != "no") [
+            "--private-users-ownership=chown"
+          ]
+          ++ [
+            # Setuid-Binaries im Gast (sudo, su, unix_chkpwd, mount …) werden
+            # damit wirkungslos: PR_SET_NO_NEW_PRIVS verbietet den Gewinn neuer
+            # Privilegien. systemd im Gast braucht das nicht, der nix-Daemon
+            # läuft auf dem Wirt.
+            "--no-new-privileges=true"
+            # /run/host/os-release verrät die Host-NixOS-Version. systemd 262
+            # kennt kein --host-os-release=, also die Datei mit /dev/null
+            # überbinden (das Verzeichnis /run/host selbst bleibt: notify und
+            # proc-kmsg braucht die Container-Integration).
+            "--bind-ro=/dev/null:/run/host/os-release"
+          ];
 
         forwardPorts = lib.optionals (inst.privateNetwork && inst.hostPort != null) [
           {
