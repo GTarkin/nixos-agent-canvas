@@ -178,12 +178,23 @@ in
         gnutar
         gzip
         which
+        # libtmux (Terminal-Tool des Agenten) ruft tmux aus dem PATH auf.
+        tmux
         cacert
       ]
       ++ cfg.extraPackages
       # pythonEnv stellt `python3` (mit den Zusatzpaketen) — deshalb steht das
       # nackte python314 bewusst nicht in dieser Liste.
       ++ [ pythonEnv ];
+
+    # tmux 3.8 beendet den Server, sobald die letzte Session weg ist
+    # (exit-empty on, Standard). libtmux verliert dann seine Fenster-IDs und
+    # der Agent bekommt "list-panes: can't find window: @N". Der Server muss
+    # stehen bleiben.
+    environment.etc."tmux.conf".text = ''
+      set -s exit-empty off
+      set -g destroy-unattached off
+    '';
 
     # Der Agent darf im gesamten Gast schreiben (root), aber nur diese zwei
     # Pfade überleben einen Neustart.
@@ -212,6 +223,8 @@ in
         gnutar
         gzip
         which
+        # libtmux (Terminal-Tool des Agenten) ruft tmux aus dem PATH auf.
+        tmux
         cacert
         # Damit der Agent selbst Werkzeuge holen kann (nix shell/profile);
         # ohne diesen Eintrag findet der Tool-Shell kein `nix`.
