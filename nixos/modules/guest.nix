@@ -169,7 +169,6 @@ in
       [
         bash
         coreutils
-        python314
         nodejs_24
         uv
         git
@@ -182,6 +181,8 @@ in
         cacert
       ]
       ++ cfg.extraPackages
+      # pythonEnv stellt `python3` (mit den Zusatzpaketen) — deshalb steht das
+      # nackte python314 bewusst nicht in dieser Liste.
       ++ [ pythonEnv ];
 
     # Der Agent darf im gesamten Gast schreiben (root), aber nur diese zwei
