@@ -94,6 +94,11 @@ in
                   (Gast-Root liest die EnvironmentFile). Die Basis darf nicht
                   mit /etc/subuid (rootless Podman) überlappen.
 
+                  HARTE BEDINGUNG: Vielfaches von 65536, sonst verweigert
+                  nspawn die Ownership-Anpassung ("Automatic UID/GID adjusting
+                  is only supported for UID/GID ranges starting at multiples of
+                  2^16") und der Gast bootet ohne /etc.
+
                   Achtung: `identity` isoliert nur Capabilities, nicht die uids —
                   Gast-Root bleibt Host-Root. Für den Trust gegenüber dem
                   nix-Daemon zählt ausschließlich eine echte Zahlen-Basis.

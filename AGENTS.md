@@ -31,7 +31,10 @@ Image-Digest zu pinnen; Versionen kommen aus `flake.lock`.
   Bei numerischer `private-users` setzt nspawn `--private-users-ownership`
   **nicht** automatisch (nur bei `pick`/`managed`): ohne
   `--private-users-ownership=chown` gehört der Root-Tree Host-Root, ist im Gast
-  „nobody" und die NixOS-Activation scheitert an `/etc`.
+  „nobody" und die NixOS-Activation scheitert an `/etc`. Und `chown` verlangt
+  eine Basis, die ein **Vielfaches von 65536** ist (262144/327680), sonst
+  bricht nspawn mit „Automatic UID/GID adjusting is only supported for
+  UID/GID ranges starting at multiples of 2^16" ab.
 - **`ephemeral = true`** in `nixos/modules/host.nix`: alles außerhalb der Binds
   ist bei Neustart weg. Wer Zustand braucht, muss ihn binden — nicht das
   Overlay abschalten.
