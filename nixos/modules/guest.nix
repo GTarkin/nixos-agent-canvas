@@ -179,6 +179,9 @@ in
         gzip
         which
         cacert
+        # Damit der Agent selbst Werkzeuge holen kann (nix shell/profile);
+        # ohne diesen Eintrag findet der Tool-Shell kein `nix`.
+        nix
       ];
       wantedBy = [ "multi-user.target" ];
       after = [ "network-online.target" ];
