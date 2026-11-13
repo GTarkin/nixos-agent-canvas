@@ -56,6 +56,23 @@ in
                 '';
               };
 
+              secretsFile = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                example = "/srv/agent-canvas/gtarkin/secrets.env";
+                description = ''
+                  Host-Datei mit LOCAL_BACKEND_API_KEY / OH_SECRET_KEY. Wird
+                  read-only nach /run/agent-canvas.env gebunden und im Gast als
+                  EnvironmentFile genutzt. Inhalt kommt aus sops (Host-Oneshot).
+                '';
+              };
+
+              memoryMax = lib.mkOption {
+                type = lib.types.str;
+                default = "2G";
+                description = "Speicherlimit der Container-Unit (nspawn).";
+              };
+
               # Freie Zusatzmodul für den Gast (z. B. Version, Paket, Env).
               extraConfig = lib.mkOption {
                 type = lib.types.deferredModule;
@@ -70,6 +87,14 @@ in
   };
 
   config = lib.mkIf (cfg.enable && cfg.instances != { }) {
+    # nspawn-Gast ohne Limit wäre der einzige Prozess auf der Kiste ohne Deckel.
+    systemd.services = lib.mapAttrs' (
+      name: inst:
+      lib.nameValuePair "container@agent-canvas-${name}" {
+        serviceConfig.MemoryMax = inst.memoryMax;
+      }
+    ) cfg.instances;
+
     containers = lib.mapAttrs' (
       name: inst:
       lib.nameValuePair "agent-canvas-${name}" {
@@ -92,17 +117,27 @@ in
             ];
           };
 
-        bindMounts = {
-          "/projects" = {
-            hostPath = inst.workspaceDir;
-            isReadOnly = false;
-          };
-          "/home/openhands/.openhands" = {
-            hostPath = inst.stateDir;
-            isReadOnly = false;
-          };
-        };
+        bindMounts = lib.mkMerge [
+          (lib.mkIf (inst.secretsFile != null) {
+            "/run/agent-canvas.env" = {
+              hostPath = inst.secretsFile;
+              isReadOnly = true;
+            };
+          })
+          {
+            "/projects" = {
+              hostPath = inst.workspaceDir;
+              isReadOnly = false;
+            };
+            "/home/openhands/.openhands" = {
+              hostPath = inst.stateDir;
+              isReadOnly = false;
+            };
+          }
+        ];
 
+        # nspawn bindet --port auf 0.0.0.0; nach außen bleibt es zu, weil die
+        # Ports nicht in networking.firewall.allowedTCPPorts stehen.
         forwardPorts = [
           {
             containerPort = inst.port;

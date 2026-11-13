@@ -62,6 +62,26 @@ in
       description = "Arbeitsverzeichnis des Agenten (Bind-Mount vom Wirt).";
     };
 
+    allowLanSessionKey = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Betten den Session-Key in die UI ein, damit Nutzer keinen Backend-Key
+        eintippen müssen. Nur vertretbar, wenn davor ein Identity-Proxy steht
+        (oauth2-proxy) und der Port nicht öffentlich erreichbar ist.
+      '';
+    };
+
+    environmentFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/run/agent-canvas.env";
+      description = ''
+        Datei mit LOCAL_BACKEND_API_KEY und OH_SECRET_KEY. Wird vom Wirt aus
+        sops erzeugt und hereingebunden (host.nix: secretsFile).
+      '';
+    };
+
     extraEnvironment = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = { };
@@ -107,6 +127,7 @@ in
       environment = {
         HOME = "/home/openhands";
         AGENT_CANVAS_DISABLE_TELEMETRY = "1";
+        AGENT_CANVAS_ALLOW_LAN_SESSION_KEY = lib.boolToString cfg.allowLanSessionKey;
         # uv lädt Python/venvs zur Laufzeit; ohne diese Pfade wäre alles
         # beim nächsten Neustart erneut zu holen.
         UV_CACHE_DIR = "${cfg.stateDir}/uv/cache";
@@ -119,6 +140,7 @@ in
 
       serviceConfig = {
         WorkingDirectory = "/home/openhands";
+        EnvironmentFile = lib.optional (cfg.environmentFile != null) cfg.environmentFile;
         # Bewusst als root: der Agent soll `nix shell`/`nix profile install`
         # nutzen können. Die Isolation kommt vom nspawn-Container, nicht von
         # einer UID im Gast.
