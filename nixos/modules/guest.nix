@@ -90,6 +90,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Fällt für alles zurück, was doch als generisches Linux-Binary kommt
+    # (der Agent lädt gern mal Fremd-Binaries). Ohne das: "NixOS cannot run
+    # dynamically linked executables intended for generic linux environments".
+    programs.nix-ld.enable = true;
+
     # NixOS-Container: Store und nix-daemon kommen vom Wirt.
     boot.isContainer = true;
 
@@ -106,6 +111,7 @@ in
     environment.systemPackages = with pkgs; [
       bash
       coreutils
+      python314
       nodejs_24
       uv
       git
@@ -135,6 +141,7 @@ in
       path = with pkgs; [
         bash
         coreutils
+        python314
         nodejs_24
         uv
         git
