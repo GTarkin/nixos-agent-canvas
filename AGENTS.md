@@ -67,6 +67,12 @@ nix fmt                         # nixfmt-rfc-style
 ## Offene Punkte
 
 - `pkgs/agent-canvas` fertigstellen (Lockfile-Problem → GitHub-Quelle).
-- `privateUsers` erst nach bewiesenem Betrieb.
+- `privateUsers` als zweite Härtungsstufe (Ticket): Userns-Remapping
+  (`privateUsers = 100000` — feste Basis, nicht `"pick"`, sonst wechseln die
+  Owner), dazu idmapped Binds über `extraFlags` (`--bind=…:idmap`), weil das
+  NixOS-Modul `bindMounts` nicht idmappt, und `chown` von `secrets.env`,
+  `state` und `projects` auf die Subuid-Basis. Aufwand ~½–1 Tag; Nutzen:
+  Schutz gegen Bugs im nix-Daemon und Kernel-Escapes. Erst nach Bewährung
+  des uid-10001-Betriebs.
 - Beim Wechsel auf dem Wirt: die bestehenden Podman-Container bleiben, bis der
   Gast auf einem Testport bewiesen ist.
