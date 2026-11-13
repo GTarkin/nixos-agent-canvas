@@ -100,13 +100,21 @@ in
 
     system.stateVersion = "25.11";
 
+    # bash/coreutils sind nicht optional: npm und uv spawnen `sh` für
+    # Lifecycle-Skripte, und NixOS setzt den PATH der Unit nur aus diesen
+    # Paketen zusammen (/bin/sh allein hilft nicht, es steht nicht im PATH).
     environment.systemPackages = with pkgs; [
+      bash
+      coreutils
       nodejs_24
       uv
       git
       curl
       jq
       ripgrep
+      gnutar
+      gzip
+      which
       cacert
     ];
 
