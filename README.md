@@ -127,10 +127,8 @@ nix develop                     # nodejs_24, uv, nixfmt
 - [ ] `pkgs/agent-canvas`: npm-Paket hat kein Lockfile → Quelle wird das
       GitHub-Repo (`OpenHands/OpenHands`, `npmBuildScript = "build:app"`),
       Details im Kopfkommentar der Datei
-- [ ] optional `privateUsers` (UID-Mapping) — Härtung gegen Kernel-/Daemon-Bugs;
-      kostet idmapped Binds (`--bind=…:idmap` per `extraFlags`, weil das Modul
-      `bindMounts` nicht idmappt) und passende Owner auf dem Wirt
-- [ ] optional `tests/`: echter VM-Test, der den Dienst startet
+- [ ] optional `tests/`: echter VM-Test, der den Dienst startet (bisher nur
+      Build-/Evaluations-Checks)
 
 ## Lizenz
 
