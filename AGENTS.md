@@ -48,6 +48,15 @@ nix fmt                         # nixfmt-rfc-style
 - Jede Verhaltensänderung an `ephemeral`, Binds oder Rechten im Gast ist eine
   Änderung am Sicherheitsmodell → im Commit begründen.
 
+## Fallen, die schon zugeschlagen haben
+
+- `environment.systemPackages` ≠ Unit-PATH → `systemd.services.agent-canvas.path`.
+- uv lädt ohne `UV_PYTHON_PREFERENCE=only-system` ein generisches glibc-Python,
+  das im Gast nicht startet (stub-ld).
+- `NIX_REMOTE` per `environment.variables` wirkt nur in Login-Shells;
+  `nix.settings.store = "daemon"` wirkt global (nötig, weil der Store
+  read-only gebunden ist).
+
 ## Offene Punkte
 
 - `pkgs/agent-canvas` fertigstellen (Lockfile-Problem → GitHub-Quelle).

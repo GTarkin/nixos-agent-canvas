@@ -70,6 +70,25 @@ nix build .#checks.x86_64-linux.guest
 nix develop                     # nodejs_24, uv, nixfmt
 ```
 
+## Verifiziert (2026-11-13, Testgast auf der VPS)
+
+| Prüfung | Ergebnis |
+|---|---|
+| Gast bootet aus dem Store (kein Image) | `machinectl list` → `agent-canvas-test`, `/canvas` → 200 |
+| Ephemerer Root | `touch /root/marker` → nach Restart weg |
+| Persistenz der Binds | `~/.openhands` (Settings, npm-/uv-Cache) und `/projects` bleiben |
+| Store geteilt | `nix shell nixpkgs#jq` holt nur `jq` in den Host-Store, Daemon-Socket funktioniert |
+| Profil überlebt Restart | `nix profile install nixpkgs#ripgrep` ist nach Container-Neustart noch da (per-container-Profil + GC-Root) |
+| Wirt unberührt | bestehende Podman-Container laufen während aller Deploys weiter |
+
+## Stolpersteine (schon eingebaut)
+
+- **`environment.systemPackages` landet nicht im PATH einer Unit.** npm braucht
+  `sh` → `systemd.services.agent-canvas.path` explizit setzen.
+- **Generisches glibc-Python läuft nicht** (stub-ld): `python314` + `UV_PYTHON_PREFERENCE=only-system`, plus `programs.nix-ld` als Fallback.
+- **`NIX_REMOTE` aus `/etc/set-environment` greift nur in Login-Shells**: der
+  Store im Gast ist read-only gebunden, deshalb `nix.settings.store = "daemon"`.
+
 ## Stand / Nächstes
 
 - [x] Gast-Modul mit Service, Store-Zugriff, Persistenz-Binds
