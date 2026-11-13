@@ -18,7 +18,7 @@ Image-Digest zu pinnen; Versionen kommen aus `flake.lock`.
   (`--option sandbox-paths`, `post-build-hook`) als Host-Root aus. Nicht auf
   root zurückstellen. Abnahmekriterium: `nix store info` → `Trusted: 0`
   (Unit `agent-canvas-trust-check`).
-- **Userns + eigenes Netz je Gast.** `privateUsers` = 300000/400000 (Quelle:
+- **Userns + eigenes Netz je Gast.** `privateUsers` = 262144/327680 (Quelle:
   `hosts/vps-server/agent-canvas-ids.nix` im Wirts-Repo). Host-Owner der Binds
   ist `Basis+10001`, `secrets.env` gehört `Basis` (Gast-Root liest die
   EnvironmentFile). Binds bleiben ohne `idmap` — mit `idmap` sähe Gast-Root
@@ -84,7 +84,7 @@ nix fmt                         # nixfmt-rfc-style
 ## Offene Punkte
 
 - `pkgs/agent-canvas` fertigstellen (Lockfile-Problem → GitHub-Quelle).
-- `privateUsers` ist umgesetzt (300000/400000). Offen bleibt die Härtung
+- `privateUsers` ist umgesetzt (262144/327680). Offen bleibt die Härtung
   gegen *verschachtelte* Userns (der Agent darf `unshare -r`; Podman auf dem
   Wirt braucht unprivilegierte Userns, also kein globales Abschalten):
   `user.max_user_namespaces` oder ein seccomp-Profil — separates Ticket.
