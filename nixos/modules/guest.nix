@@ -62,6 +62,16 @@ in
       description = "Arbeitsverzeichnis des Agenten (Bind-Mount vom Wirt).";
     };
 
+    portOffset = lib.mkOption {
+      type = lib.types.int;
+      default = 0;
+      description = ''
+        Verschiebt die internen Ports (agent-server 18000, automation 18001,
+        vscode 18003, vite 18005) um diesen Betrag. Nötig, wenn mehrere Gäste
+        den Netzwerk-Namespace des Wirts teilen — sonst kollidieren sie.
+      '';
+    };
+
     allowLanSessionKey = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -180,6 +190,11 @@ in
         NPM_CONFIG_CACHE = "${cfg.stateDir}/npm-cache";
         # Damit der Agent Werkzeuge über Nix holen kann.
         NIX_PATH = "nixpkgs=flake:nixpkgs";
+        # Interne Ports pro Instanz verschieben (geteilter Netns!).
+        OH_CANVAS_SAFE_BACKEND_PORT = toString (18000 + cfg.portOffset);
+        OH_CANVAS_SAFE_AUTOMATION_PORT = toString (18001 + cfg.portOffset);
+        OH_CANVAS_SAFE_VSCODE_PORT = toString (18003 + cfg.portOffset);
+        OH_CANVAS_SAFE_VITE_PORT = toString (18005 + cfg.portOffset);
         # Nix-Python statt uv-Download (generisches glibc-CPython laeuft hier
         # nicht) und Loader-Pfad fuer PyPI-Wheels (tokenizers -> libstdc++).
         UV_PYTHON_PREFERENCE = "only-system";

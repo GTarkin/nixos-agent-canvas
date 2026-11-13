@@ -99,6 +99,12 @@ in
                 '';
               };
 
+              portOffset = lib.mkOption {
+                type = lib.types.int;
+                default = 0;
+                description = "Verschiebt die internen Ports im Gast (geteilter Netns: pro Instanz verschieden).";
+              };
+
               memoryMax = lib.mkOption {
                 type = lib.types.str;
                 default = "2G";
