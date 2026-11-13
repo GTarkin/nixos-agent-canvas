@@ -18,6 +18,16 @@ Image-Digest zu pinnen; Versionen kommen aus `flake.lock`.
   (`--option sandbox-paths`, `post-build-hook`) als Host-Root aus. Nicht auf
   root zurückstellen. Abnahmekriterium: `nix store info` → `Trusted: 0`
   (Unit `agent-canvas-trust-check`).
+- **Userns + eigenes Netz je Gast.** `privateUsers` = 300000/400000 (Quelle:
+  `hosts/vps-server/agent-canvas-ids.nix` im Wirts-Repo). Host-Owner der Binds
+  ist `Basis+10001`, `secrets.env` gehört `Basis` (Gast-Root liest die
+  EnvironmentFile). Binds bleiben ohne `idmap` — mit `idmap` sähe Gast-Root
+  wieder Host-Root.
+  `privateNetwork = true` mit eigenem veth: im geteilten Netns erreicht der
+  Agent die Host-Loopback-Dienste (Postgres, SFTPGo-Admin, Django,
+  oauth2-proxy) und die andere Instanz. Auf dem Wirt deshalb 22/80/443 nur auf
+  `ens6` freigeben, LiteLLM (4000) als einzige Ausnahme für 10.100.0.0/16,
+  NAT für den Container-Egress.
 - **`ephemeral = true`** in `nixos/modules/host.nix`: alles außerhalb der Binds
   ist bei Neustart weg. Wer Zustand braucht, muss ihn binden — nicht das
   Overlay abschalten.
@@ -67,12 +77,9 @@ nix fmt                         # nixfmt-rfc-style
 ## Offene Punkte
 
 - `pkgs/agent-canvas` fertigstellen (Lockfile-Problem → GitHub-Quelle).
-- `privateUsers` als zweite Härtungsstufe (Ticket): Userns-Remapping
-  (`privateUsers = 100000` — feste Basis, nicht `"pick"`, sonst wechseln die
-  Owner), dazu idmapped Binds über `extraFlags` (`--bind=…:idmap`), weil das
-  NixOS-Modul `bindMounts` nicht idmappt, und `chown` von `secrets.env`,
-  `state` und `projects` auf die Subuid-Basis. Aufwand ~½–1 Tag; Nutzen:
-  Schutz gegen Bugs im nix-Daemon und Kernel-Escapes. Erst nach Bewährung
-  des uid-10001-Betriebs.
+- `privateUsers` ist umgesetzt (300000/400000). Offen bleibt die Härtung
+  gegen *verschachtelte* Userns (der Agent darf `unshare -r`; Podman auf dem
+  Wirt braucht unprivilegierte Userns, also kein globales Abschalten):
+  `user.max_user_namespaces` oder ein seccomp-Profil — separates Ticket.
 - Beim Wechsel auf dem Wirt: die bestehenden Podman-Container bleiben, bis der
   Gast auf einem Testport bewiesen ist.

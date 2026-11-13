@@ -6,6 +6,8 @@ und holt Werkzeuge über Nix (`nix shell nixpkgs#jq`, `nix profile install …`)
 während der Wirt nur seinen Store teilt und zwei Verzeichnisse hereinhängt.
 Unprivilegiert ist dabei nicht Kosmetik: als root wäre der Gast für den
 nix-Daemon des Wirts vertrauenswürdig und könnte darüber Host-Root erlangen.
+Zusätzlich läuft jeder Gast in einer eigenen Userns (`privateUsers`) und einem
+eigenen Netzwerk-Namespace (`privateNetwork`, eigenes veth).
 
 ## Warum
 
@@ -42,6 +44,18 @@ Im Gast überlebt **nur**, was der Wirt bindet:
 Alles andere (inkl. `/home/openhands/workspace`) ist tmpfs. `XDG_CACHE_HOME`
 zeigt ebenfalls in den State-Bind, damit nixpkgs nach einem Neustart nicht
 erneut geladen wird.
+
+### Userns und Netz
+
+| | Wert | Konsequenz |
+|---|---|---|
+| `privateUsers` | 300000 / 400000 (je Instanz) | Gast-uid `z` = Host-uid `Basis+z`; Host-Owner der Binds ist `Basis+10001`, `secrets.env` gehört `Basis` |
+| `privateNetwork` | `true`, veth `10.100.<n>.1` (Host) / `.2` (Gast) | kein Zugriff auf die Host-Loopback-Dienste; nginx proxyt auf die Container-Adresse |
+| LiteLLM | `http://litellm:4000` → Host-Seite des veth | einzige Host-Ausnahme in der Firewall (`10.100.0.0/16` → 4000) |
+
+Binds bewusst **ohne** `:idmap`: mit `idmap` sähe Gast-Root auf `/projects` und
+im State wieder Host-Root. `noidmap` (Default) macht Gast-Root dort zu
+„nobody" — genau richtig.
 
 ## Benutzung auf dem Wirt
 
@@ -92,6 +106,8 @@ nix develop                     # nodejs_24, uv, nixfmt
 | Store geteilt | `nix shell nixpkgs#jq` holt nur `jq` in den Host-Store, Daemon-Socket funktioniert |
 | Profil überlebt Restart | `nix profile install nixpkgs#ripgrep` ist nach Container-Neustart noch da (`XDG_STATE_HOME` liegt im State-Bind) |
 | Agent unprivilegiert | `nix store info` → `Trusted: 0` (Unit `agent-canvas-trust-check`); `nix shell`/`nix profile install` funktionieren trotzdem |
+| Eigene Userns | `cat /proc/1/uid_map` → `0 300000 65536`, `id` → `10001`; Host-Owner der Dateien ist `310001` |
+| Eigenes Netz | `readlink /proc/self/ns/net` ≠ Host; Host-Loopback (5432, 8081, 28981 …) nicht erreichbar; LiteLLM auf 4000 weiterhin |
 | Wirt unberührt | bestehende Podman-Container laufen während aller Deploys weiter |
 
 ## Stolpersteine (schon eingebaut)
@@ -107,6 +123,7 @@ nix develop                     # nodejs_24, uv, nixfmt
 - [x] Gast-Modul mit Service, Store-Zugriff, Persistenz-Binds
 - [x] Wirt-Modul mit ephemeral-Containern und Portweiterleitung
 - [x] Checks (Gast baut, Host-Modul erzeugt Container)
+- [x] Userns-Remapping (`privateUsers`) und eigenes veth (`privateNetwork`)
 - [ ] `pkgs/agent-canvas`: npm-Paket hat kein Lockfile → Quelle wird das
       GitHub-Repo (`OpenHands/OpenHands`, `npmBuildScript = "build:app"`),
       Details im Kopfkommentar der Datei

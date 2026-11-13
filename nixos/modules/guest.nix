@@ -108,6 +108,26 @@ in
       '';
     };
 
+    privateNetwork = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        true, wenn der Gast eine eigene Netzwerk-Namespace hat (Wirt:
+        `privateNetwork`). Nur dann darf er seine eigene Firewall verwalten —
+        im geteilten Netns würde er die Regeln des WIRTS überschreiben, weil
+        iptables/nftables pro Namespace gelten.
+      '';
+    };
+
+    litellmHost = lib.mkOption {
+      type = lib.types.str;
+      default = "127.0.0.1";
+      description = ''
+        Adresse, unter der das LiteLLM-Gateway aus dem Gast erreichbar ist.
+        Geteilter Netns: 127.0.0.1. Eigenes veth: die Host-Seite (hostAddress).
+      '';
+    };
+
     allowLanSessionKey = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -159,17 +179,21 @@ in
     # dynamically linked executables intended for generic linux environments".
     programs.nix-ld.enable = true;
 
-    # LiteLLM läuft im Host-Netz (0.0.0.0:4000); der Gast teilt diesen
-    # Namespace, also ist 127.0.0.1 richtig. Der Name kommt aus dem
-    # LLM-Profil (Preset) und muss auch im Gast auflösen.
-    networking.extraHosts = "127.0.0.1 litellm";
+    # LiteLLM läuft im Host-Netz (0.0.0.0:4000). Der Name kommt aus dem
+    # LLM-Profil (Preset) und muss im Gast auflösen: ohne eigenes veth ist das
+    # 127.0.0.1 (geteilter Netns), mit veth die Host-Seite (litellmHost).
+    networking.extraHosts = "${cfg.litellmHost} litellm";
 
     # NixOS-Container: Store und nix-daemon kommen vom Wirt.
     boot.isContainer = true;
 
-    # Im Container gibt es keine eigene Firewall; die Portweiterleitung macht
-    # der Wirt (forwardPorts).
-    networking.firewall.enable = false;
+    # Eigene Firewall NUR mit eigener Netzwerk-Namespace. Im geteilten Netns
+    # würde der Gast die Regeln des WIRTS überschreiben (iptables/nftables
+    # gelten pro Namespace) — deshalb war sie hier abgeschaltet. Die
+    # Portweiterleitung 10.100.x.1 -> 10.100.x.2 macht der Wirt (veth).
+    networking.firewall.enable = cfg.privateNetwork;
+    networking.firewall.allowedTCPPorts = lib.optionals cfg.privateNetwork [ cfg.port ];
+    # Statische Adresse setzt der Container-Init des Wirts; DHCP gibt es nicht.
     networking.useDHCP = false;
 
     system.stateVersion = "25.11";

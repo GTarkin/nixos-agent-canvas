@@ -5,11 +5,14 @@
 #     beim nächsten Start weg
 #   * geteiltem Store (macht das NixOS-Containermodul automatisch, read-only)
 #   * zwei Bind-Mounts: Workspace und State
-#   * Portweiterleitung Gast -> 127.0.0.1 (davor oauth2-proxy/nginx)
+#   * mit privateNetwork = true ein eigenes veth; sonst teilt der Gast den
+#     Netzwerk-Namespace des Wirts (dann erreicht er dessen Loopback!)
 #
 # Beispiel:
 #   services.agent-canvas-host.instances.gtarkin = {
-#     hostPort = 8001;
+#     privateNetwork = true;
+#     hostAddress = "10.100.1.1";
+#     localAddress = "10.100.1.2";
 #     workspaceDir = "/srv/openhands/gtarkin/projects";
 #     stateDir = "/srv/openhands/gtarkin/state";
 #   };
@@ -53,9 +56,11 @@ in
                 default = false;
                 description = ''
                   false: Container teilt den Netzwerk-Namespace des Wirts — die
-                  Dienste im Gast belegen Host-Ports direkt. Praktisch für einen
-                  einzelnen Testgast, unmöglich für mehrere Instanzen.
-                  true: eigenes veth; dann hostAddress/localAddress setzen.
+                  Dienste im Gast belegen Host-Ports direkt und erreichen die
+                  Host-Loopback-Dienste (Postgres, Admin-Oberflächen, andere
+                  Instanzen). Nur für einen einzelnen Testgast vertretbar.
+                  true: eigenes veth; dann hostAddress/localAddress setzen und
+                  nginx auf die Container-Adresse zeigen lassen.
                 '';
               };
 
@@ -69,8 +74,30 @@ in
               localAddress = lib.mkOption {
                 type = lib.types.nullOr lib.types.str;
                 default = null;
-                example = "10.100.1.2/24";
+                example = "10.100.1.2";
                 description = "Container-Adresse; im Gast als statische IP setzen.";
+              };
+
+              privateUsers = lib.mkOption {
+                type = lib.types.either lib.types.ints.u32 (
+                  lib.types.enum [
+                    "no"
+                    "identity"
+                  ]
+                );
+                default = "no";
+                description = ''
+                  Userns-Basis (systemd-nspawn --private-users). Bei einer Zahl
+                  gilt: Gast-uid `z` == Host-uid `Basis + z`. Dann müssen
+                  workspaceDir und stateDir der Host-uid `Basis + <Dienst-uid>`
+                  gehören (guest.nix: 10001) und secretsFile der uid `Basis`
+                  (Gast-Root liest die EnvironmentFile). Die Basis darf nicht
+                  mit /etc/subuid (rootless Podman) überlappen.
+
+                  Achtung: `identity` isoliert nur Capabilities, nicht die uids —
+                  Gast-Root bleibt Host-Root. Für den Trust gegenüber dem
+                  nix-Daemon zählt ausschließlich eine echte Zahlen-Basis.
+                '';
               };
 
               workspaceDir = lib.mkOption {
@@ -78,8 +105,8 @@ in
                 example = "/srv/openhands/gtarkin/projects";
                 description = ''
                   Host-Pfad, der im Gast als /projects erscheint. Muss dem
-                  Dienst-User des Gasts gehören (guest.nix: uid 10001); ohne
-                  Userns-Remapping gilt Host-uid == Gast-uid.
+                  Dienst-User des Gasts gehören — ohne Userns uid 10001, mit
+                  privateUsers = Basis die uid Basis+10001.
                 '';
               };
 
@@ -89,9 +116,10 @@ in
                 description = ''
                   Host-Pfad für Settings/Conversations (~/.openhands im Gast).
                   Muss existieren und dem Dienst-User des Gasts gehören
-                  (uid 10001) — NICHT root. Der Gast setzt darauf bewusst keine
-                  tmpfiles-Regel, weil die Regel auf einen Bind-Mountpoint
-                  wirkt und damit die Rechte auf dem Wirt überschreibt.
+                  (ohne Userns 10001, mit Basis Basis+10001) — NICHT root. Der
+                  Gast setzt darauf bewusst keine tmpfiles-Regel, weil die Regel
+                  auf einen Bind-Mountpoint wirkt und damit die Rechte auf dem
+                  Wirt überschreibt.
                 '';
               };
 
@@ -103,6 +131,9 @@ in
                   Host-Datei mit LOCAL_BACKEND_API_KEY / OH_SECRET_KEY. Wird
                   read-only nach /run/agent-canvas.env gebunden und im Gast als
                   EnvironmentFile genutzt. Inhalt kommt aus sops (Host-Oneshot).
+                  Mit privateUsers muss die Datei der uid `Basis` gehören
+                  (Gast-Root liest sie) und 0400 bleiben — Host-Root ist für den
+                  Gast „nobody" und kommt per DAC-Override nicht heran.
                 '';
               };
 
@@ -132,6 +163,11 @@ in
   };
 
   config = lib.mkIf (cfg.enable && cfg.instances != { }) {
+    assertions = lib.mapAttrsToList (name: inst: {
+      assertion = !inst.privateNetwork || (inst.hostAddress != null && inst.localAddress != null);
+      message = "services.agent-canvas-host.instances.${name}: privateNetwork = true braucht hostAddress und localAddress.";
+    }) cfg.instances;
+
     # nspawn-Gast ohne Limit wäre der einzige Prozess auf der Kiste ohne Deckel.
     systemd.services = lib.mapAttrs' (
       name: inst:
@@ -155,7 +191,14 @@ in
               {
                 services.agent-canvas = {
                   enable = true;
-                  inherit (inst) port portOffset;
+                  inherit (inst) port portOffset privateNetwork;
+                  # Der Name `litellm` muss im eigenen Netns auf die Host-Seite
+                  # des veth zeigen; im geteilten Netns bleibt es 127.0.0.1.
+                  litellmHost =
+                    if inst.privateNetwork && inst.hostAddress != null then
+                      lib.head (lib.splitString "/" inst.hostAddress)
+                    else
+                      "127.0.0.1";
                   environmentFile = lib.mkIf (inst.secretsFile != null) "/run/agent-canvas.env";
                 };
               }
@@ -163,9 +206,10 @@ in
             ];
           };
 
-        # uids werden 1:1 gemappt (kein Userns-Remapping): die Host-Pfade
-        # müssen dem Dienst-User des Gasts (uid 10001) gehören, sonst kann der
-        # Gast nicht schreiben.
+        # Binds bleiben bewusst OHNE idmap (nspawn-Default `noidmap`): damit
+        # gilt Gast-uid z == Host-uid Basis+z. Mit `idmap` sähe Gast-Root auf
+        # diesen Mounts wieder Host-Root — genau die Rechte, die wir vermeiden.
+        # Ohne Userns (privateUsers = "no") ist Basis 0, also Gast-uid == Host-uid.
         bindMounts = lib.mkMerge [
           (lib.mkIf (inst.secretsFile != null) {
             "/run/agent-canvas.env" = {
@@ -185,7 +229,7 @@ in
           }
         ];
 
-        inherit (inst) privateNetwork;
+        inherit (inst) privateNetwork privateUsers;
 
         forwardPorts = lib.optionals (inst.privateNetwork && inst.hostPort != null) [
           {
