@@ -82,15 +82,10 @@ in
     };
 
     pythonPackages = lib.mkOption {
-      type = lib.types.either (lib.types.listOf lib.types.package) (
-        lib.types.functionTo (lib.types.listOf lib.types.package)
-      );
+      type = lib.types.listOf lib.types.package;
       default = [ ];
-      example = lib.literalExpression "ps: [ ps.pandas ps.openpyxl ]";
-      description = ''
-        Python-Pakete des Interpreters, den der Agent benutzt. Entweder eine
-        Liste oder eine Funktion auf python314Packages.
-      '';
+      example = lib.literalExpression "with pkgs.python314Packages; [ pandas openpyxl ]";
+      description = "Python-Pakete des Interpreters, den der Agent benutzt.";
     };
 
     portOffset = lib.mkOption {
