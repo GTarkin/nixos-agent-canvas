@@ -112,6 +112,9 @@ nix develop                     # nodejs_24, uv, nixfmt
 | Agent unprivilegiert | `nix store info` → `Trusted: 0` (Unit `agent-canvas-trust-check`); `nix shell`/`nix profile install` funktionieren trotzdem |
 | Eigene Userns | `cat /proc/1/uid_map` → `0 262144 65536`, `id` → `10001`; Host-Owner der Dateien ist `272145` |
 | Eigenes Netz | `readlink /proc/self/ns/net` ≠ Host; Host-Loopback (5432, 8081, 28981 …) nicht erreichbar; LiteLLM auf 4000 weiterhin |
+| Kein IPv6 | `ip -6 addr show eth0` → 0 Adressen (`networking.enableIPv6 = false`) |
+| NoNewPrivs | `awk '/NoNewPrivs/' /proc/1/status` → 1, auch für Units als uid 10001; setuid-Binaries wirkungslos |
+| Host-os-release maskiert | `wc -c < /run/host/os-release` → 0 (`--bind-ro=/dev/null:…`) |
 | Wirt unberührt | bestehende Podman-Container laufen während aller Deploys weiter |
 
 ## Stolpersteine (schon eingebaut)

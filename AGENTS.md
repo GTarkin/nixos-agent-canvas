@@ -35,6 +35,10 @@ Image-Digest zu pinnen; Versionen kommen aus `flake.lock`.
   eine Basis, die ein **Vielfaches von 65536** ist (262144/327680), sonst
   bricht nspawn mit „Automatic UID/GID adjusting is only supported for
   UID/GID ranges starting at multiples of 2^16" ab.
+  Weitere Härtung im selben Aufruf: `--no-new-privileges=true` (setuid im Gast
+  wirkungslos), `/run/host/os-release` per `/dev/null`-Bind maskiert (systemd
+  262 hat kein `--host-os-release=`), und im Gast `networking.enableIPv6 =
+  false` (die Link-Local auf eth0 wäre ein lateraler Pfad).
 - **`ephemeral = true`** in `nixos/modules/host.nix`: alles außerhalb der Binds
   ist bei Neustart weg. Wer Zustand braucht, muss ihn binden — nicht das
   Overlay abschalten.
