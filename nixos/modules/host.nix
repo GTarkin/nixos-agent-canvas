@@ -148,7 +148,8 @@ in
               {
                 services.agent-canvas = {
                   enable = true;
-                  port = inst.port;
+                  inherit (inst) port portOffset;
+                  environmentFile = lib.mkIf (inst.secretsFile != null) "/run/agent-canvas.env";
                 };
               }
               inst.extraConfig
