@@ -154,6 +154,18 @@ in
                 description = "Speicherlimit der Container-Unit (nspawn).";
               };
 
+              memoryHigh = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                example = "1500M";
+                description = ''
+                  Weiches Speicherlimit (systemd MemoryHigh): ab hier drosselt
+                  der Kernel den Gast, bevor MemoryMax hart zuschlägt. Sinnvoll,
+                  damit ein schwerer Agent früher gebremst wird und nicht in den
+                  Swap des Wirts läuft. null = kein weiches Limit.
+                '';
+              };
+
               # Freie Zusatzmodul für den Gast (z. B. Version, Paket, Env).
               extraConfig = lib.mkOption {
                 type = lib.types.deferredModule;
@@ -177,7 +189,10 @@ in
     systemd.services = lib.mapAttrs' (
       name: inst:
       lib.nameValuePair "container@agent-canvas-${name}" {
-        serviceConfig.MemoryMax = inst.memoryMax;
+        serviceConfig = {
+          MemoryMax = inst.memoryMax;
+        }
+        // lib.optionalAttrs (inst.memoryHigh != null) { MemoryHigh = inst.memoryHigh; };
       }
     ) cfg.instances;
 
