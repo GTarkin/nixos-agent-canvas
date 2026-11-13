@@ -90,6 +90,18 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Der Agent soll `nix shell nixpkgs#tool` und `nix profile install` nutzen.
+    # Flakes müssen dafür aktiv sein, und der Client schreibt über den
+    # Daemon des Wirts (der Store im Gast ist read-only gebunden).
+    nix.settings = {
+      experimental-features = [
+        "nix-command"
+        "flakes"
+      ];
+      trusted-users = [ "root" ];
+    };
+    environment.variables.NIX_REMOTE = "daemon";
+
     # Fällt für alles zurück, was doch als generisches Linux-Binary kommt
     # (der Agent lädt gern mal Fremd-Binaries). Ohne das: "NixOS cannot run
     # dynamically linked executables intended for generic linux environments".
