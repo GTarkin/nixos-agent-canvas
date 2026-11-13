@@ -18,6 +18,10 @@
 
 let
   cfg = config.services.agent-canvas;
+
+  # Python samt Zusatzpaketen (pandas & Co.). Landet im PATH der Unit, damit
+  # der Agent im Tool-Shell genau diesen Interpreter vorfindet.
+  pythonEnv = pkgs.python314.withPackages (_: cfg.pythonPackages);
 in
 {
   options.services.agent-canvas = {
@@ -60,6 +64,22 @@ in
       type = lib.types.str;
       default = "/projects";
       description = "Arbeitsverzeichnis des Agenten (Bind-Mount vom Wirt).";
+    };
+
+    extraPackages = lib.mkOption {
+      type = lib.types.listOf lib.types.package;
+      default = [ ];
+      description = ''
+        Zusätzliche Pakete für diesen Gast: landen in environment.systemPackages
+        und im PATH der Unit (nur systemPackages reicht dem Agenten nicht).
+      '';
+    };
+
+    pythonPackages = lib.mkOption {
+      type = lib.types.listOf lib.types.package;
+      default = [ ];
+      example = lib.literalExpression "ps: [ ps.pandas ps.openpyxl ]";
+      description = "Python-Pakete des Interpreters, den der Agent benutzt.";
     };
 
     portOffset = lib.mkOption {
@@ -138,21 +158,25 @@ in
     # bash/coreutils sind nicht optional: npm und uv spawnen `sh` für
     # Lifecycle-Skripte, und NixOS setzt den PATH der Unit nur aus diesen
     # Paketen zusammen (/bin/sh allein hilft nicht, es steht nicht im PATH).
-    environment.systemPackages = with pkgs; [
-      bash
-      coreutils
-      python314
-      nodejs_24
-      uv
-      git
-      curl
-      jq
-      ripgrep
-      gnutar
-      gzip
-      which
-      cacert
-    ];
+    environment.systemPackages =
+      with pkgs;
+      [
+        bash
+        coreutils
+        python314
+        nodejs_24
+        uv
+        git
+        curl
+        jq
+        ripgrep
+        gnutar
+        gzip
+        which
+        cacert
+      ]
+      ++ cfg.extraPackages
+      ++ [ pythonEnv ];
 
     # Der Agent darf im gesamten Gast schreiben (root), aber nur diese zwei
     # Pfade überleben einen Neustart.
@@ -168,10 +192,13 @@ in
       # WICHTIG: environment.systemPackages landet NICHT im PATH einer Unit.
       # Ohne diese Liste findet npm kein `sh` und keine Tools (erster Versuch:
       # "npm error enoent spawn sh").
-      path = with pkgs; [
+      path = [
+        pythonEnv
+      ]
+      ++ cfg.extraPackages
+      ++ (with pkgs; [
         bash
         coreutils
-        python314
         nodejs_24
         uv
         git
@@ -182,7 +209,7 @@ in
         # Damit der Agent selbst Werkzeuge holen kann (nix shell/profile);
         # ohne diesen Eintrag findet der Tool-Shell kein `nix`.
         nix
-      ];
+      ]);
       wantedBy = [ "multi-user.target" ];
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
