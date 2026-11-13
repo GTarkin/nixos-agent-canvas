@@ -1,9 +1,11 @@
 # nixos-agent-canvas
 
 Agent Canvas (OpenHands) als **NixOS-Gast in einem systemd-nspawn-Container** —
-statt als Debian-OCI-Image. Der Agent läuft als root im Gast und kann Werkzeuge
-über Nix holen (`nix shell nixpkgs#jq`, `nix profile install …`), während der
-Wirt nur seinen Store teilt und zwei Verzeichnisse hereinhängt.
+statt als Debian-OCI-Image. Der Agent läuft als uid 10001 (`openhands`) im Gast
+und holt Werkzeuge über Nix (`nix shell nixpkgs#jq`, `nix profile install …`),
+während der Wirt nur seinen Store teilt und zwei Verzeichnisse hereinhängt.
+Unprivilegiert ist dabei nicht Kosmetik: als root wäre der Gast für den
+nix-Daemon des Wirts vertrauenswürdig und könnte darüber Host-Root erlangen.
 
 ## Warum
 
@@ -35,9 +37,11 @@ Im Gast überlebt **nur**, was der Wirt bindet:
 | Gast-Pfad | Host-Pfad | Inhalt |
 |---|---|---|
 | `/projects` | `/srv/openhands/<instanz>/projects` | Workspace des Agenten |
-| `/home/openhands/.openhands` | `/srv/openhands/<instanz>/state` | Settings, Conversations, uv-/npm-Caches |
+| `/home/openhands/.openhands` | `/srv/openhands/<instanz>/state` | Settings, Conversations, uv-/npm-Caches, `nix profile` (`XDG_STATE_HOME`) |
 
-Alles andere (inkl. `/home/openhands/.cache`) ist tmpfs.
+Alles andere (inkl. `/home/openhands/workspace`) ist tmpfs. `XDG_CACHE_HOME`
+zeigt ebenfalls in den State-Bind, damit nixpkgs nach einem Neustart nicht
+erneut geladen wird.
 
 ## Benutzung auf dem Wirt
 
@@ -59,8 +63,16 @@ Alles andere (inkl. `/home/openhands/.cache`) ist tmpfs.
 }
 ```
 
-Verzeichnisse vorher anlegen (`systemd.tmpfiles.rules`), der Gast schreibt als
-root.
+Verzeichnisse vorher anlegen und dem Dienst-User (uid 10001) übergeben — der
+Gast setzt darauf bewusst keine tmpfiles-Regel, weil die auf der Host-Seite
+wirken würde:
+
+```nix
+systemd.tmpfiles.rules = [
+  "d /srv/openhands/gtarkin/projects 0775 openhands openhands -"
+  "d /srv/openhands/gtarkin/state    0700 openhands openhands -"
+];
+```
 
 ## Entwickeln
 
@@ -78,7 +90,8 @@ nix develop                     # nodejs_24, uv, nixfmt
 | Ephemerer Root | `touch /root/marker` → nach Restart weg |
 | Persistenz der Binds | `~/.openhands` (Settings, npm-/uv-Cache) und `/projects` bleiben |
 | Store geteilt | `nix shell nixpkgs#jq` holt nur `jq` in den Host-Store, Daemon-Socket funktioniert |
-| Profil überlebt Restart | `nix profile install nixpkgs#ripgrep` ist nach Container-Neustart noch da (per-container-Profil + GC-Root) |
+| Profil überlebt Restart | `nix profile install nixpkgs#ripgrep` ist nach Container-Neustart noch da (`XDG_STATE_HOME` liegt im State-Bind) |
+| Agent unprivilegiert | `nix store info` → `Trusted: 0` (Unit `agent-canvas-trust-check`); `nix shell`/`nix profile install` funktionieren trotzdem |
 | Wirt unberührt | bestehende Podman-Container laufen während aller Deploys weiter |
 
 ## Stolpersteine (schon eingebaut)
@@ -97,7 +110,9 @@ nix develop                     # nodejs_24, uv, nixfmt
 - [ ] `pkgs/agent-canvas`: npm-Paket hat kein Lockfile → Quelle wird das
       GitHub-Repo (`OpenHands/OpenHands`, `npmBuildScript = "build:app"`),
       Details im Kopfkommentar der Datei
-- [ ] optional `privateUsers` (UID-Mapping) — erst nach bewiesenem Betrieb
+- [ ] optional `privateUsers` (UID-Mapping) — Härtung gegen Kernel-/Daemon-Bugs;
+      kostet idmapped Binds (`--bind=…:idmap` per `extraFlags`, weil das Modul
+      `bindMounts` nicht idmappt) und passende Owner auf dem Wirt
 - [ ] optional `tests/`: echter VM-Test, der den Dienst startet
 
 ## Lizenz

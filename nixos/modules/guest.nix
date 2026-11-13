@@ -6,9 +6,19 @@
 #   /home/openhands/.openhands     -> Settings, Conversations, Caches
 #
 # Alles andere im Gast ist bei einem Neustart weg — das ist Absicht. Der Agent
-# läuft als root im Gast, damit er Werkzeuge über Nix holen kann
+# läuft als uid 10001 (User `openhands`) und holt Werkzeuge über Nix
 # (`nix shell nixpkgs#jq`, `nix profile install …`); der Wirt teilt dafür
 # seinen Store (read-only) und den nix-daemon-Socket.
+#
+# WARUM NICHT ROOT: der nix-Daemon läuft auf dem WIRT und beurteilt Clients
+# nur nach ihrer uid. Gast-Root ist ohne Userns-Remapping Host-Root und damit
+# in `trusted-users` -> `Trusted: 1`; ein vertrauenswürdiger Client darf
+# daemonweite Optionen setzen (`--option sandbox-paths …`, `post-build-hook`),
+# und die führt der Daemon als Host-Root AUSHALB der Container-Isolation aus.
+# Das ist ein Ausbruchspfad (Auslöser: Prompt-Injection in einem Upload).
+# Als uid 10001 ist der Client unprivilegiert: bauen und Pfade realisieren ja,
+# daemonweite Optionen nein. Abnahmekriterium: `nix store info` -> `Trusted: 0`
+# (siehe Unit agent-canvas-trust-check).
 {
   config,
   lib,
@@ -134,7 +144,10 @@ in
         "nix-command"
         "flakes"
       ];
-      trusted-users = [ "root" ];
+      # KEIN `trusted-users` hier: bei `store = "daemon"` entscheidet der
+      # Daemon des WIRTS anhand der Peer-uid, nicht diese Datei. Die Option
+      # wäre also wirkungslos und würde nur suggerieren, man könnte den Trust
+      # im Gast konfigurieren.
       # Global in /etc/nix/nix.conf: der lokale Store ist read-only gebunden,
       # Schreibzugriffe müssen über den Daemon des Wirts laufen. Als
       # environment.variables reicht es nicht (greift nur in Login-Shells).
@@ -192,12 +205,24 @@ in
     # ("list-panes: can't find window: @N"). Nicht wieder einbauen, ohne das
     # gegen eine echte Conversation zu testen.
 
-    # Der Agent darf im gesamten Gast schreiben (root), aber nur diese zwei
-    # Pfade überleben einen Neustart.
+    # Dienst-User im Gast. Die uid MUSS der des Host-Users `openhands` aus
+    # nixos-config entsprechen: ohne Userns-Remapping werden Bind-Mounts 1:1
+    # gemappt, sonst kann der Gast die Dateien auf dem Wirt nicht schreiben.
+    users.groups.openhands.gid = 10001;
+    users.users.openhands = {
+      isSystemUser = true;
+      uid = 10001;
+      group = "openhands";
+      home = "/home/openhands";
+    };
+
+    # NUR /home/openhands anlegen. Die beiden anderen Pfade sind vom Wirt
+    # hereingebundene Mountpoints: eine tmpfiles-Regel darauf wirkt auf der
+    # HOST-Seite und hat dort schon einmal die Rechte zerlegt (`/projects`
+    # wurde 0755 root root, die ACL-Maske fiel auf `---`). Besitzer und Modus
+    # gehören deshalb dem Wirt, nicht dem Gast.
     systemd.tmpfiles.rules = [
-      "d /home/openhands 0700 root root -"
-      "d ${cfg.stateDir} 0700 root root -"
-      "d ${cfg.workspaceDir} 0755 root root -"
+      "d /home/openhands 0750 openhands openhands -"
     ];
 
     systemd.services.agent-canvas = {
@@ -237,6 +262,12 @@ in
         UV_CACHE_DIR = "${cfg.stateDir}/uv/cache";
         UV_PYTHON_INSTALL_DIR = "${cfg.stateDir}/uv/python";
         NPM_CONFIG_CACHE = "${cfg.stateDir}/npm-cache";
+        # `nix profile install` legt sein Profil unter $XDG_STATE_HOME ab, der
+        # Fetcher (nixpkgs-Tarball, Eval-Cache) unter $XDG_CACHE_HOME. Beides
+        # in den State-Bind, sonst ist das Profil nach jedem Neustart weg und
+        # nixpkgs wird erneut geladen.
+        XDG_STATE_HOME = "${cfg.stateDir}/xdg-state";
+        XDG_CACHE_HOME = "${cfg.stateDir}/xdg-cache";
         # Damit der Agent Werkzeuge über Nix holen kann.
         NIX_PATH = "nixpkgs=flake:nixpkgs";
         # Interne Ports pro Instanz verschieben (geteilter Netns!).
@@ -256,11 +287,15 @@ in
       // cfg.extraEnvironment;
 
       serviceConfig = {
+        # Der Dienst läuft unprivilegiert (siehe Kopfkommentar): `nix shell`
+        # und `nix profile install` gehen als normaler Nutzer, aber der
+        # Daemon des Wirts stuft ihn nicht als vertrauenswürdig ein. Die
+        # EnvironmentFile liest systemd weiterhin als root ein, die Datei
+        # bleibt daher 0400 root auf dem Wirt.
+        User = "openhands";
+        Group = "openhands";
         WorkingDirectory = "/home/openhands";
         EnvironmentFile = lib.optional (cfg.environmentFile != null) cfg.environmentFile;
-        # Bewusst als root: der Agent soll `nix shell`/`nix profile install`
-        # nutzen können. Die Isolation kommt vom nspawn-Container, nicht von
-        # einer UID im Gast.
         ExecStart =
           if cfg.package != null then
             "${cfg.package}/bin/agent-canvas --port ${toString cfg.port} --host 0.0.0.0"
@@ -274,6 +309,33 @@ in
         RestartSec = "10";
         TimeoutStartSec = "600";
       };
+    };
+
+    # Regressionstest für die Trust-Grenze: fällt der Dienst je wieder auf root
+    # zurück (oder wird der Daemon des Wirts anders konfiguriert), ist der
+    # Agent wieder vertrauenswürdig — und damit ein Host-Root-Ausbruchspfad.
+    # Blockiert den Start nicht, wird aber in `systemctl status` rot.
+    systemd.services.agent-canvas-trust-check = {
+      description = "Prüft, dass der Agent gegenüber dem nix-Daemon unprivilegiert ist";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "agent-canvas.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        User = "openhands";
+        Group = "openhands";
+      };
+      script = ''
+        out=$(${pkgs.nix}/bin/nix store info 2>&1)
+        case "$out" in
+          *"Trusted: 0"*) echo "ok: nix-Daemon behandelt den Agenten als unprivilegiert" ;;
+          *)
+            echo "FEHLER: der Dienst gilt für den nix-Daemon als privilegiert:"
+            echo "$out"
+            exit 1
+            ;;
+        esac
+      '';
     };
   };
 }

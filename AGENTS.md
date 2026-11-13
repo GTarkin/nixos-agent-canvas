@@ -10,23 +10,30 @@ Image-Digest zu pinnen; Versionen kommen aus `flake.lock`.
 
 ## Harte Randbedingungen
 
-- **Root im Gast ist Absicht** (uid 0 im Container). Der Agent soll
-  `nix shell`/`nix profile install` nutzen können. Isolation kommt vom
-  nspawn-Container, nicht von einer UID im Gast. Nicht „aus Sicherheitsgründen"
-  auf einen normalen User umstellen, ohne das mit dem Wirt neu zu bewerten.
+- **Der Dienst läuft als uid 10001 (`openhands`), nicht als root.** Der Agent
+  soll `nix shell`/`nix profile install` nutzen können — das geht als normaler
+  Nutzer. Root im Gast wäre ein Ausbruchspfad: ohne Userns-Remapping ist
+  Gast-Root = Host-Root, der nix-Daemon des Wirts stuft ihn als
+  vertrauenswürdig ein (`Trusted: 1`) und führt daemonweite Optionen
+  (`--option sandbox-paths`, `post-build-hook`) als Host-Root aus. Nicht auf
+  root zurückstellen. Abnahmekriterium: `nix store info` → `Trusted: 0`
+  (Unit `agent-canvas-trust-check`).
 - **`ephemeral = true`** in `nixos/modules/host.nix`: alles außerhalb der Binds
   ist bei Neustart weg. Wer Zustand braucht, muss ihn binden — nicht das
   Overlay abschalten.
 - **Der Store gehört dem Wirt.** Der Gast kann Pfade hinzufügen (über den
-  nix-daemon-Socket) und sieht alle Store-Pfade. Er kann damit keinen Host-Root
-  erlangen, aber CPU/Disk verbrauchen.
+  nix-daemon-Socket) und sieht alle Store-Pfade. Als unprivilegierter Client
+  kann er damit keinen Host-Root erlangen (content-addressed, kein
+  Überschreiben), aber CPU/Disk verbrauchen. Diese Aussage gilt NUR, solange
+  der Dienst nicht als root läuft — Root im Gast darf daemonweite Optionen
+  setzen und ist damit Host-Root (siehe oben).
 - **Persistenz nur über die zwei Binds** (`/projects`, `~/.openhands`).
 
 ## Aufbau
 
 | Datei | Rolle |
 |---|---|
-| `nixos/modules/guest.nix` | Gast-System: Optionen unter `services.agent-canvas`, tmpfiles, Service als root |
+| `nixos/modules/guest.nix` | Gast-System: Optionen unter `services.agent-canvas`, tmpfiles, Service als uid 10001 (`openhands`) |
 | `nixos/modules/host.nix` | Wirt: `services.agent-canvas-host.instances.<name>` → `containers."agent-canvas-<name>"` |
 | `pkgs/agent-canvas/` | WIP-Paketierung, bewusst nicht im Flake exportiert (siehe Kopfkommentar) |
 | `tests/flake.nix` | eigener Flake, prüft die Nutzung als Flake-Input |

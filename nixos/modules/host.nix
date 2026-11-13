@@ -76,7 +76,11 @@ in
               workspaceDir = lib.mkOption {
                 type = lib.types.str;
                 example = "/srv/openhands/gtarkin/projects";
-                description = "Host-Pfad, der im Gast als /projects erscheint.";
+                description = ''
+                  Host-Pfad, der im Gast als /projects erscheint. Muss dem
+                  Dienst-User des Gasts gehören (guest.nix: uid 10001); ohne
+                  Userns-Remapping gilt Host-uid == Gast-uid.
+                '';
               };
 
               stateDir = lib.mkOption {
@@ -84,7 +88,10 @@ in
                 example = "/srv/openhands/gtarkin/state";
                 description = ''
                   Host-Pfad für Settings/Conversations (~/.openhands im Gast).
-                  Muss existieren und dem Gast-root gehören (rootful nspawn).
+                  Muss existieren und dem Dienst-User des Gasts gehören
+                  (uid 10001) — NICHT root. Der Gast setzt darauf bewusst keine
+                  tmpfiles-Regel, weil die Regel auf einen Bind-Mountpoint
+                  wirkt und damit die Rechte auf dem Wirt überschreibt.
                 '';
               };
 
@@ -156,6 +163,9 @@ in
             ];
           };
 
+        # uids werden 1:1 gemappt (kein Userns-Remapping): die Host-Pfade
+        # müssen dem Dienst-User des Gasts (uid 10001) gehören, sonst kann der
+        # Gast nicht schreiben.
         bindMounts = lib.mkMerge [
           (lib.mkIf (inst.secretsFile != null) {
             "/run/agent-canvas.env" = {
