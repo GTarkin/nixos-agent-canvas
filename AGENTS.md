@@ -28,6 +28,10 @@ Image-Digest zu pinnen; Versionen kommen aus `flake.lock`.
   oauth2-proxy) und die andere Instanz. Auf dem Wirt deshalb 22/80/443 nur auf
   `ens6` freigeben, LiteLLM (4000) als einzige Ausnahme für 10.100.0.0/16,
   NAT für den Container-Egress.
+  Bei numerischer `private-users` setzt nspawn `--private-users-ownership`
+  **nicht** automatisch (nur bei `pick`/`managed`): ohne
+  `--private-users-ownership=chown` gehört der Root-Tree Host-Root, ist im Gast
+  „nobody" und die NixOS-Activation scheitert an `/etc`.
 - **`ephemeral = true`** in `nixos/modules/host.nix`: alles außerhalb der Binds
   ist bei Neustart weg. Wer Zustand braucht, muss ihn binden — nicht das
   Overlay abschalten.

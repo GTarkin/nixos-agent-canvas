@@ -231,6 +231,16 @@ in
 
         inherit (inst) privateNetwork privateUsers;
 
+        # Ohne `pick`/`managed` ist --private-users-ownership NICHT automatisch
+        # aktiv. Dann bleibt der Root-Tree host-root und ist im Gast „nobody":
+        # Gast-Root kann /etc nicht schreiben, die NixOS-Activation scheitert
+        # (Folge: kein agent-canvas.service, leeres /etc). Der Tree ist winzig
+        # (ephemeres /run/nixos-containers/<name>), chown ist billig und
+        # funktioniert auf jedem Dateisystem — `map` ginge nicht überall.
+        extraFlags = lib.optionals (inst.privateUsers != "no") [
+          "--private-users-ownership=chown"
+        ];
+
         forwardPorts = lib.optionals (inst.privateNetwork && inst.hostPort != null) [
           {
             containerPort = inst.port;
