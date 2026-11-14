@@ -78,6 +78,13 @@ nix fmt                         # nixfmt-rfc-style
 
 ## Fallen, die schon zugeschlagen haben
 
+- **`AGENT_CANVAS_ALLOW_LAN_SESSION_KEY` wird ignoriert** (agent-canvas 1.40).
+  Die Entscheidung fällt im Launcher über das **CLI-Flag**
+  `--allow-lan-session-key`. Ohne das Flag startet der Static-Server mit
+  `--auth-required` und ohne Session-Key im HTML — dann zeigt jeder Browser
+  ohne gespeicherten Backend-Eintrag den „Add backend"-Dialog, während der
+  Desktop (mit altem localStorage-Eintrag) weiter funktioniert.
+
 - `environment.systemPackages` ≠ Unit-PATH → `systemd.services.agent-canvas.path`.
 - uv lädt ohne `UV_PYTHON_PREFERENCE=only-system` ein generisches glibc-Python,
   das im Gast nicht startet (stub-ld).
