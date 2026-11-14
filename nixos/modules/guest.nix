@@ -135,6 +135,12 @@ in
         Betten den Session-Key in die UI ein, damit Nutzer keinen Backend-Key
         eintippen müssen. Nur vertretbar, wenn davor ein Identity-Proxy steht
         (oauth2-proxy) und der Port nicht öffentlich erreichbar ist.
+
+        Das ist ein **CLI-Flag** (`--allow-lan-session-key`). Die frühere
+        Env-Variable `AGENT_CANVAS_ALLOW_LAN_SESSION_KEY` wird von
+        agent-canvas 1.40 ignoriert — ohne das Flag läuft die UI im
+        `authRequired`-Modus und jeder neue Browser zeigt den
+        „Add backend"-Dialog (Hostname + API-Key).
       '';
     };
 
@@ -287,7 +293,6 @@ in
       environment = {
         HOME = "/home/openhands";
         AGENT_CANVAS_DISABLE_TELEMETRY = "1";
-        AGENT_CANVAS_ALLOW_LAN_SESSION_KEY = lib.boolToString cfg.allowLanSessionKey;
         # uv lädt Python/venvs zur Laufzeit; ohne diese Pfade wäre alles
         # beim nächsten Neustart erneut zu holen.
         UV_CACHE_DIR = "${cfg.stateDir}/uv/cache";
@@ -329,12 +334,12 @@ in
         EnvironmentFile = lib.optional (cfg.environmentFile != null) cfg.environmentFile;
         ExecStart =
           if cfg.package != null then
-            "${cfg.package}/bin/agent-canvas --port ${toString cfg.port} --host 0.0.0.0"
+            "${cfg.package}/bin/agent-canvas --port ${toString cfg.port} --host 0.0.0.0${lib.optionalString cfg.allowLanSessionKey " --allow-lan-session-key"}"
           else
             "${pkgs.writeShellScript "agent-canvas-npx" ''
               exec ${pkgs.nodejs_24}/bin/npx --yes \
                 @openhands/agent-canvas@${cfg.version} \
-                --port ${toString cfg.port} --host 0.0.0.0
+                --port ${toString cfg.port} --host 0.0.0.0${lib.optionalString cfg.allowLanSessionKey " --allow-lan-session-key"}
             ''}";
         Restart = "on-failure";
         RestartSec = "10";
